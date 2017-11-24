@@ -29,7 +29,7 @@ let scriptBody = "/usr/local/bin/carthage copy-frameworks"
     .map { (_, value) in value }
     .filter { dependencyMap[$0.name] != nil }
 
-  for (_, target) in pbxproj.objects.nativeTargets {
+  for target in targets {
     print(target.name)
     
     let dependencies = dependencyMap[target.name] ?? [];
@@ -49,5 +49,5 @@ let scriptBody = "/usr/local/bin/carthage copy-frameworks"
     pbxproj.objects.addObject(scriptPhase)
     target.buildPhases.append(reference)
     
-    try! project.write(path: sampleProjectPath, override: true)
+    try! project.write(path: targetProjectPath, override: true)
   }
