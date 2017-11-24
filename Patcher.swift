@@ -6,68 +6,91 @@ let sampleProjectName: Path = "Sample.xcodeproj"
 let basePath: Path = "/Users/fuzza/Development/integrator/"
 let sampleProjectFolder: Path = basePath + "Test/Sample/"
 let sampleProjectPath: Path = sampleProjectFolder + sampleProjectName
-let targetProjectPath: Path = sampleProjectFolder + "Target.xcodeproj"
 let carthageRelativePath: Path = "Carthage/Build/iOS"
-let target = "Sample"
-let testTarget = target + "Tests"
-
-let dependencyMap = [target : ["RxSwift", "RxCocoa"],
-                     testTarget : ["RxSwift", "RxCocoa", "RxTest", "RxBlocking"]]
 
 let inputFolder = "$(SRCROOT)/Carthage/Build/iOS/"
 let outputFolder = "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/"
 
 let scriptBody = "/usr/local/bin/carthage copy-frameworks"
 
-enum Dependency {
+enum Dependency: Hashable {
   case carthage(String)
+  
+  var asString: String {
+    switch self {
+    case let .carthage(name):
+      return name
+    }
+  }
+  
+  var hashValue: Int {
+    switch self {
+    case let .carthage(name):
+      return name.hashValue
+    }
+  }
+  
+ static func ==(lhs: Dependency, rhs: Dependency) -> Bool {
+    switch (lhs, rhs) {
+    case let (.carthage(leftName), .carthage(rightName)):
+      return leftName == rightName
+    }
+  }
+}
+
+struct Target {
+  var name: String
+  var dependencies: [Dependency]
 }
 
 class Project {
   var name: String
-  var testTarget: String
+  var targets: [Target]
   
-  var dependencies: [Dependency]
-  var testDependencies: [Dependency]
-  
-  var resolvedDependencies: [Dependency] {
-    return dependencies
+  func resolveDependencies(for target: Target) -> [Dependency] {
+    return target.dependencies
   }
   
-  var resolvedTestDependencies: [Dependency] {
-    return allDependencies
+  func resolveAllDependencies() -> Set<Dependency> {
+    let flattenedDependencies = targets
+      .map { self.resolveDependencies(for: $0) }
+      .flatMap { $0 }
+    return Set(flattenedDependencies)
   }
   
-  var allDependencies: [Dependency] {
-    return dependencies + testDependencies
+  func target(_ name: String) -> Target? {
+    return targets.first { $0.name == name }
   }
   
   init(name: String,
-       testTarget: String? = nil,
-       dependencies: [Dependency] = [],
-       testDependencies: [Dependency] = []) {
+       targets: [Target]) {
     self.name = name
-    self.testTarget = testTarget ?? name + "Tests"
-    self.dependencies = dependencies
-    self.testDependencies = testDependencies
+    self.targets = targets
   }
 }
 
-let Sample = Project(
+let sample = Project(
   name: "Sample",
-  dependencies: [
-    .carthage("RxSwift"),
-    .carthage("RxCocoa")
-  ],
-  testDependencies: [
-    .carthage("RxTest"),
-    .carthage("RxBlocking")
-  ])
+  targets: [
+    Target(
+      name: "Sample",
+      dependencies: [
+        .carthage("RxSwift"),
+        .carthage("RxCocoa")
+      ]),
+    Target(
+      name: "SampleTests",
+      dependencies: [
+        .carthage("RxSwift"),
+        .carthage("RxCocoa"),
+        .carthage("RxTest"),
+        .carthage("RxBlocking")
+      ])
+  ]
+)
 
-let project = try! XcodeProj(path: sampleProjectPath)
-print(project)
-
-let pbxproj = project.pbxproj
+let projectFile = try! XcodeProj(path: sampleProjectPath)
+let pbxproj = projectFile.pbxproj
 
 // START FRAMEWORK SEARCH PATH
 
@@ -78,41 +101,38 @@ let pbxproj = project.pbxproj
  );
  */
 
-let searchPath: Path = "$(PROJECT_DIR)" + carthageRelativePath
+let rootObjectUid = pbxproj.objects.projects.getReference(pbxproj.rootObject)!
+let configurationListUid = rootObjectUid.buildConfigurationList
+let configurationList = pbxproj.objects.configurationLists.getReference(configurationListUid)!
 
-let projectObject = pbxproj.objects.projects.getReference(pbxproj.rootObject)!
-let configurationList = pbxproj.objects.configurationLists.getReference(projectObject.buildConfigurationList)!
-
+let frameworkSearchPath: Path = "$(PROJECT_DIR)" + carthageRelativePath
 configurationList.buildConfigurations
   .flatMap { pbxproj.objects.buildConfigurations.getReference($0) }
-  .forEach { $0.buildSettings["FRAMEWORK_SEARCH_PATHS"] = searchPath; print($0.name) }
-
-let targets = pbxproj.objects.nativeTargets
-  .map { (_, value) in value }
-  .filter { dependencyMap[$0.name] != nil }
+  .forEach { $0.buildSettings["FRAMEWORK_SEARCH_PATHS"] = frameworkSearchPath }
 
 // END FRAMEWORK SEARCH PATH
 
 // SHELL SCRIPT RUN PHASE
-for target in targets {
-  print(target.name)
-  
-  let dependencies = dependencyMap[target.name] ?? [];
-  print(dependencies)
-  
-  let inputPaths = dependencies.map { inputFolder + $0 + ".framework" }
-  let outputPaths = dependencies.map { outputFolder + $0 + ".framework" }
-  
-  let reference = pbxproj.generateUUID(for: PBXShellScriptBuildPhase.self)
-  let scriptPhase = PBXShellScriptBuildPhase(reference: reference,
-                                             name: "Integrator",
-                                             inputPaths: inputPaths,
-                                             outputPaths: outputPaths,
-                                             shellScript: scriptBody)
-  
-  pbxproj.objects.addObject(scriptPhase)
-  target.buildPhases.append(reference)
-}
+pbxproj.objects.nativeTargets
+  .map { (_, value) in value }
+  .forEach { target in
+    let targetModel = sample.target(target.name)!
+    let dependencies = sample.resolveDependencies(for: targetModel).map { $0.asString }
+    
+    let inputPaths = dependencies.map { inputFolder + $0 + ".framework" }
+    let outputPaths = dependencies.map { outputFolder + $0 + ".framework" }
+    
+    let reference = pbxproj.generateUUID(for: PBXShellScriptBuildPhase.self)
+    let scriptPhase = PBXShellScriptBuildPhase(reference: reference,
+                                               name: "Integrator",
+                                               inputPaths: inputPaths,
+                                               outputPaths: outputPaths,
+                                               shellScript: scriptBody)
+    
+    pbxproj.objects.addObject(scriptPhase)
+    target.buildPhases.append(reference)
+  }
+
   /*
    Add PBXFileReference
    
@@ -164,5 +184,5 @@ for target in targets {
    
    */
 
-try! project.write(path: sampleProjectPath, override: true)
+try! projectFile.write(path: sampleProjectPath, override: true)
 
