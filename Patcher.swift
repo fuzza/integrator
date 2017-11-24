@@ -7,7 +7,6 @@ let basePath: Path = "/Users/fuzza/Development/integrator/"
 let sampleProjectFolder: Path = basePath + "Test/Sample/"
 let sampleProjectPath: Path = sampleProjectFolder + sampleProjectName
 let targetProjectPath: Path = sampleProjectFolder + "Target.xcodeproj"
-let carthagePath: Path = sampleProjectFolder + "Carthage/Build/iOS/"
 
 let target = "Sample"
 let testTarget = target + "Tests"
@@ -19,8 +18,6 @@ let inputFolder = "$(SRCROOT)/Carthage/Build/iOS/"
 let outputFolder = "$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/"
 
 let scriptBody = "/usr/local/bin/carthage copy-frameworks"
-
-
 
 //do {
   let project = try! XcodeProj(path: sampleProjectPath)
@@ -52,5 +49,5 @@ let scriptBody = "/usr/local/bin/carthage copy-frameworks"
     pbxproj.objects.addObject(scriptPhase)
     target.buildPhases.append(reference)
     
-    try! pbxproj.write(path: sampleProjectPath, override: true)
+    try! project.write(path: sampleProjectPath, override: true)
   }
