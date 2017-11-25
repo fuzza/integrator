@@ -101,8 +101,8 @@ let pbxproj = projectFile.pbxproj
  );
  */
 
-let rootObjectUid = pbxproj.objects.projects.getReference(pbxproj.rootObject)!
-let configurationListUid = rootObjectUid.buildConfigurationList
+let rootObject = pbxproj.objects.projects.getReference(pbxproj.rootObject)!
+let configurationListUid = rootObject.buildConfigurationList
 let configurationList = pbxproj.objects.configurationLists.getReference(configurationListUid)!
 
 let frameworkSearchPath: Path = "$(PROJECT_DIR)" + carthageRelativePath
@@ -112,13 +112,100 @@ configurationList.buildConfigurations
 
 // END FRAMEWORK SEARCH PATH
 
+// START CREATE PBXGROUP FOR FRAMEWORKS
+
+/*
+ 6FD7C34B1FC8BA2700971D97 /* Frameworks */ = {
+ isa = PBXGroup;
+ children = (
+ );
+ name = Frameworks;
+ sourceTree = "<group>";
+ };
+*/
+
+let carthageGroupName = "Carthage"
+
+let groupUid = pbxproj.generateUUID(for: PBXGroup.self)
+let group = PBXGroup(reference: groupUid,
+                     children: [],
+                     sourceTree: .group,
+                     name: carthageGroupName)
+pbxproj.objects.addObject(group)
+
+// END CREATE PBXGROUP FOR FRAMEWORKS
+
+// START ADD PBXGROUP TO ROOT PROJECT GROUP
+
+/*
+ 6FD7C2E91FC8982000971D97 = {
+ isa = PBXGroup;
+ children = (
+ 6FD7C2F41FC8982000971D97 /* Sample */,
+ 6FD7C3091FC8982000971D97 /* SampleTests */,
+ 6FD7C2F31FC8982000971D97 /* Products */,
+ 6FD7C34B1FC8BA2700971D97 /* Frameworks */,
+ );
+ sourceTree = "<group>";
+ };
+ */
+
+let rootGroupUid = rootObject.mainGroup
+let rootGroup = pbxproj.objects.groups.getReference(rootGroupUid)!
+rootGroup.children.append(groupUid)
+
+// END ADD PBXGROUP TO ROOT PROJECT GROUP
+
+// ADD FRAMEWORKS AS FILE REFERENCES
+
+/*
+ Add PBXFileReference
+ 
+ 6FD7C34C1FC8BA2700971D97 /* RxCocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = RxCocoa.framework; path = Carthage/Build/iOS/RxCocoa.framework; sourceTree = "<group>"; };
+ 
+ */
+
+sample.resolveAllDependencies()
+  .map { $0.asString.appending(".framework") }
+  .map { (framework: String) -> PBXFileReference in
+    let frameworkUid = pbxproj.generateUUID(for: PBXFileReference.self)
+    return PBXFileReference(reference: frameworkUid,
+                            sourceTree: .group,
+                            name: framework,
+                            lastKnownFileType: "wrapper.framework",
+                            path: carthageRelativePath.string + "/" + framework)
+  }
+  .forEach {
+    pbxproj.objects.addObject($0)
+    group.children.append($0.reference)
+  }
+
+// END ADD FRAMEWORKS AS FILE REFERENCES
+
+// ADD FRAMEWORKS TO CARTHAGE GROUP
+
+/*
+ 6FD7C34B1FC8BA2700971D97 /* Frameworks */ = {
+ isa = PBXGroup;
+ children = (
+ 6FD7C34C1FC8BA2700971D97 /* RxCocoa.framework */,
+ );
+ name = Frameworks;
+ sourceTree = "<group>";
+ };
+ */
+
+
+
+// END ADD FRAMEWORKS TO CARTHAGE GROUP
+
+
 // SHELL SCRIPT RUN PHASE
 pbxproj.objects.nativeTargets
   .map { (_, value) in value }
   .forEach { target in
     let targetModel = sample.target(target.name)!
-    let dependencies = sample.resolveDependencies(for: targetModel).map { $0.asString }
-    
+    let dependencies = sample.resolveDependencies(for: targetModel).map { $0.asString }    
     let inputPaths = dependencies.map { inputFolder + $0 + ".framework" }
     let outputPaths = dependencies.map { outputFolder + $0 + ".framework" }
     
@@ -133,45 +220,20 @@ pbxproj.objects.nativeTargets
     target.buildPhases.append(reference)
   }
 
-  /*
-   Add PBXFileReference
-   
-   6FD7C34C1FC8BA2700971D97 /* RxCocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = RxCocoa.framework; path = Carthage/Build/iOS/RxCocoa.framework; sourceTree = "<group>"; };
-   
-   */
-  
+// END SHELL SCPRIT RUN PHASE
+
+
+
+
+
+
   /*
    Add PBXBuildFile
    
    6FD7C34D1FC8BA2800971D97 /* RxCocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6FD7C34C1FC8BA2700971D97 /* RxCocoa.framework */; };
    
    */
-  
-  /*
-   Add PBXGroup
-   
-   6FD7C2E91FC8982000971D97 = {
-   isa = PBXGroup;
-   children = (
-   6FD7C2F41FC8982000971D97 /* Sample */,
-   6FD7C3091FC8982000971D97 /* SampleTests */,
-   6FD7C2F31FC8982000971D97 /* Products */,
-   6FD7C34B1FC8BA2700971D97 /* Frameworks */,
-   );
-   sourceTree = "<group>";
-   };
-   
-   6FD7C34B1FC8BA2700971D97 /* Frameworks */ = {
-   isa = PBXGroup;
-   children = (
-   6FD7C34C1FC8BA2700971D97 /* RxCocoa.framework */,
-   );
-   name = Frameworks;
-   sourceTree = "<group>";
-   };
-   
-   */
-  
+
   /*
    Add PBXFrameworksBuildPhase
    
