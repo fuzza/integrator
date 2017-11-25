@@ -161,30 +161,13 @@ rootGroup.children.append(groupUid)
 /*
  Add PBXFileReference
  
+ PBXFileReference
+ 
  6FD7C34C1FC8BA2700971D97 /* RxCocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = RxCocoa.framework; path = Carthage/Build/iOS/RxCocoa.framework; sourceTree = "<group>"; };
  
- */
-
-sample.resolveAllDependencies()
-  .map { $0.asString.appending(".framework") }
-  .map { (framework: String) -> PBXFileReference in
-    let frameworkUid = pbxproj.generateUUID(for: PBXFileReference.self)
-    return PBXFileReference(reference: frameworkUid,
-                            sourceTree: .group,
-                            name: framework,
-                            lastKnownFileType: "wrapper.framework",
-                            path: carthageRelativePath.string + "/" + framework)
-  }
-  .forEach {
-    pbxproj.objects.addObject($0)
-    group.children.append($0.reference)
-  }
-
-// END ADD FRAMEWORKS AS FILE REFERENCES
-
-// ADD FRAMEWORKS TO CARTHAGE GROUP
-
-/*
+ 
+ Add to frameworks group
+ 
  6FD7C34B1FC8BA2700971D97 /* Frameworks */ = {
  isa = PBXGroup;
  children = (
@@ -193,19 +176,57 @@ sample.resolveAllDependencies()
  name = Frameworks;
  sourceTree = "<group>";
  };
+ 
+ Add build file
+ 
+ 6FD7C34D1FC8BA2800971D97 /* RxCocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6FD7C34C1FC8BA2700971D97 /* RxCocoa.framework */; };
  */
 
+struct LinkedFramework {
+  var name: String
+  var fileReferenceUid: String
+  var buildFileUid: String
+  
+  var fileName: String {
+    return name + ".framework"
+  }
+}
 
+let linkedFrameworks = sample.resolveAllDependencies()
+  .map { $0.asString }
+  .map {
+    LinkedFramework(name: $0,
+                    fileReferenceUid: pbxproj.generateUUID(for: PBXFileReference.self),
+                    buildFileUid: pbxproj.generateUUID(for: PBXBuildFile.self))
+  }
+  
+linkedFrameworks
+  .forEach {
+    // Add file reference
+    let fileReference = PBXFileReference(reference: $0.fileReferenceUid,
+                                         sourceTree: .group,
+                                         name: $0.fileName,
+                                         lastKnownFileType: "wrapper.framework",
+                                         path: carthageRelativePath.string + "/" + $0.fileName)
+    pbxproj.objects.addObject(fileReference)
+    
+    // Add file reference to framework group
+    group.children.append($0.fileReferenceUid)
+  
+    // Add build file
+    let buildFile = PBXBuildFile(reference: $0.buildFileUid, fileRef: $0.fileReferenceUid)
+    pbxproj.objects.addObject(buildFile)
+  }
 
-// END ADD FRAMEWORKS TO CARTHAGE GROUP
-
+// END ADD FRAMEWORKS AS FILE REFERENCES
 
 // SHELL SCRIPT RUN PHASE
+
 pbxproj.objects.nativeTargets
   .map { (_, value) in value }
   .forEach { target in
     let targetModel = sample.target(target.name)!
-    let dependencies = sample.resolveDependencies(for: targetModel).map { $0.asString }    
+    let dependencies = sample.resolveDependencies(for: targetModel).map { $0.asString }
     let inputPaths = dependencies.map { inputFolder + $0 + ".framework" }
     let outputPaths = dependencies.map { outputFolder + $0 + ".framework" }
     
@@ -222,16 +243,10 @@ pbxproj.objects.nativeTargets
 
 // END SHELL SCPRIT RUN PHASE
 
-
-
-
-
-
   /*
    Add PBXBuildFile
    
-   6FD7C34D1FC8BA2800971D97 /* RxCocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6FD7C34C1FC8BA2700971D97 /* RxCocoa.framework */; };
-   
+ 
    */
 
   /*
