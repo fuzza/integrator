@@ -239,27 +239,29 @@ pbxproj.objects.nativeTargets
     
     pbxproj.objects.addObject(scriptPhase)
     target.buildPhases.append(reference)
+    
+    // Link binary with libraries
+    
+    /*
+     Add PBXFrameworksBuildPhase
+     
+     isa = PBXFrameworksBuildPhase;
+     buildActionMask = 2147483647;
+     files = (
+     6FD7C34D1FC8BA2800971D97 /* RxCocoa.framework in Frameworks */,
+     );
+     runOnlyForDeploymentPostprocessing = 0;
+     
+     */
+    
+    let frameworksBuildPhase = target.buildPhases
+      .flatMap { pbxproj.objects.frameworksBuildPhases[$0] }
+      .first!
+
+    linkedFrameworks
+      .filter { dependencies.contains($0.name) }
+      .forEach { frameworksBuildPhase.files.append($0.buildFileUid) }
   }
-
-// END SHELL SCPRIT RUN PHASE
-
-  /*
-   Add PBXBuildFile
-   
- 
-   */
-
-  /*
-   Add PBXFrameworksBuildPhase
-   
-   isa = PBXFrameworksBuildPhase;
-   buildActionMask = 2147483647;
-   files = (
-   6FD7C34D1FC8BA2800971D97 /* RxCocoa.framework in Frameworks */,
-   );
-   runOnlyForDeploymentPostprocessing = 0;
-   
-   */
 
 try! projectFile.write(path: sampleProjectPath, override: true)
 
